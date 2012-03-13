@@ -1,0 +1,132 @@
+<?php
+// $Id: hover_preview.module,v 1.1.2.1 2010/05/17 03:07:06 rjbrown99 Exp $
+
+/**
+ * Implementation of hook_theme()
+ */
+function hover_preview_theme() {  
+  $presets_a = imagecache_presets();
+  $presets_b = $presets_a;
+
+  $items = array();
+  $items['hover_preview'] = array(
+    'arguments' => array('node' => NULL, 'field_name' => '', 'preset_a' => '', 'preset_b' => '')
+  );
+ 
+  foreach ($presets_a as $preset_a) {
+    foreach ($presets_b as $preset_b) {
+      $id = $preset_a['presetname'] . '_hover_preview_' . $preset_b['presetname'];
+      $items['hover_preview_formatter_' . $id] = array(
+        'arguments' => array('element' => NULL),
+        'function' => 'theme_hover_preview_formatter',
+      );
+    }
+  }
+  return $items;
+}
+
+/**
+ * Implementation of hook_field_formatter_info().
+ * Adds formatters to CCK image fields
+ */
+function hover_preview_field_formatter_info() {
+  $presets_a = imagecache_presets();
+  $presets_b = $presets_a;
+  
+  $formatters = array();
+  foreach ($presets_a as $preset_a) {
+    foreach ($presets_b as $preset_b) {
+      $id = $preset_a['presetname'] . '_hover_preview_' . $preset_b['presetname'];
+      $formatters[$id] = array(
+        'label' => t('Hover: @preset_a TO: @preset_b', array('@preset_a' => $preset_a['presetname'], '@preset_b' => $preset_b['presetname'])),
+        'field types' => array('image', 'filefield'),
+      );
+    }
+  }
+  return $formatters;
+}
+
+/**
+ * Display a field like an imagecache formatter but with a wrapper to facilitate the hover preview.
+ *
+ * Some parts of this function are inspired from theme_imagecache_formatter_default()
+ *   since hover preview is just extra stuff around an imagecache-generated img tag.
+ */
+function theme_hover_preview_formatter($element) {
+  // Use a counter to generate unique id's for an image and it's corresponding preview url
+  static $counter = 0;
+  
+  // Inside a view $element may contain NULL data. In that case, just return.
+  if (empty($element['#item']['fid'])) {
+    return '';
+  }
+
+  drupal_add_js(drupal_get_path('module', 'hover_preview') . '/hover_preview.js');
+  drupal_add_css(drupal_get_path('module', 'hover_preview') . '/hover_preview.css');
+
+  // Extract the two constituent presets
+  list($preset_a, $preset_b) = explode('_hover_preview_', $element['#formatter']);
+
+  // Generate the preview data
+  $preview_id = "hover-preview-" . $counter;
+  $preview_url = imagecache_create_url($preset_b, $element['#item']['filepath']);
+  $preview_attributes = array(
+    'class' => 'hover-preview-preview-url',
+    'style' => 'display: none',
+    'id' => $preview_id . '-url'
+    );
+  $preview_text = l('', $preview_url, array('attributes' => $preview_attributes));
+
+  // Generate stuff needed for imagecache
+  $style = 'default';
+  $item = $element['#item'];
+
+  // Set the image alt and title if suitable values are available
+  if (isset($item['data']['alt'])) {
+    $alt = $item['data']['alt'];
+  }
+  elseif (isset($element['#node']->node_title)) {
+    $alt = $element['#node']->node_title;
+  }
+  elseif (isset($element['#node']->title)) {
+    $alt = $element['#node']->title;
+  }
+  
+  if (isset($item['data']['title'])) {
+    $title = $item['data']['title'];
+  }
+  else {
+    $title = $alt;
+  }
+  
+  // Generate the imagecache html
+  $class = "imagecache imagecache-$preset_a imagecache-$style imagecache-{$element['#formatter']}";
+  $class .= " hover-preview";
+  $output = theme('imagecache', $preset_a, $item['filepath'], $alt, $title, array('class' => $class, 'id' => $preview_id));
+
+  $counter++;
+  return $output . $preview_text;
+}
+
+/**
+ * Convenience function to display an applicable field from a node using hover_preview
+ *
+ * Usage: theme('hover_preview', $node, 'field_photo', 'small_preset', 'large_preset');
+ */
+function theme_hover_preview($node, $field_name, $preset_a, $preset_b) {
+  $field = content_fields($field_name, $node->type);
+  if ($field) {
+    // If necessary, pass the node through node_view first to sanitise it
+    if (empty($node->content)) {
+      node_view($node);
+    }
+    // Poke CCK's display settings to use the formatter we want
+    $format = $preset_a . '_hover_preview_' . $preset_b;
+    $field['display_settings']['full']['format'] = $format;
+
+    // Invoke CCK to assemble the data structure for us and then render it
+    $data = content_field('view', $node, $field, $node->$field_name, FALSE, FALSE);
+    $output = drupal_render($data);
+    return $output;
+  }  
+}

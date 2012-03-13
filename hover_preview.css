@@ -1,0 +1,12 @@
+/* $Id: hover_preview.css,v 1.1 2010/02/12 00:25:08 rjbrown99 Exp $ */
+
+#hover-preview
+{
+	z-index: 1000;
+  position:absolute;
+  border:1px solid #fff;
+  background:#fff;
+  padding:5px;
+  display:none;
+  color:#000;
+}
